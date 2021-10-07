@@ -32,49 +32,25 @@ fun Customer.getMostExpensiveProduct(): Product? = orders.flatMap { it.products 
 
 // 7. Получить соответствие в мапе: город - количество заказанных и доставленных продуктов в данный город.
 fun Shop.getNumberOfDeliveredProductByCity(): Map<City, Int> {
-    val numberOfDeliveredProductByCity = mutableMapOf<City, Int>()
-    for (customer in customers) {
-        var amountOfProduct = customer.orders.stream().filter { it.isDelivered }.map { it.products.size }.toList().sum()
-        if (numberOfDeliveredProductByCity.containsKey(customer.city))
-            amountOfProduct += numberOfDeliveredProductByCity[customer.city] ?: 0
-        numberOfDeliveredProductByCity[customer.city] = amountOfProduct
-    }
-    return numberOfDeliveredProductByCity
+    return customers.groupBy({ it.city },
+        {
+            it.orders.stream().filter { order -> order.isDelivered }
+                .map { order -> order.products.size }.toList().sum()
+        })
+        .map { it.key to it.value.sum() }.toMap()
 }
 
 // 8. Получить соответствие в мапе: город - самый популярный продукт в городе.
 fun Shop.getMostPopularProductInCity(): Map<City, Product> {
-    val allProductsOfEachCity = mutableMapOf<City, List<Product>>()
-    for (customer in customers) {
-        var amountOfProducts = customer.orders.flatMap { it.products }.toList()
-        if (allProductsOfEachCity.containsKey(customer.city))
-            amountOfProducts += (allProductsOfEachCity[customer.city]!!)
-        allProductsOfEachCity[customer.city] = amountOfProducts
+    return customers.groupBy { it.city }.mapValues {
+        it.value.flatMap { customer -> customer.orders }.flatMap { order -> order.products }
+            .groupingBy { product -> product }.eachCount()
+            .maxByOrNull { it.value!! }!!.key
     }
-    val popularProductOfEachCity = mutableMapOf<City, Product>()
-    for ((k, v) in allProductsOfEachCity) {
-        val popularProduct = v.groupingBy { it.name }.eachCount().maxByOrNull { it.value }
-        if (popularProduct != null)
-            popularProductOfEachCity[k] = v.find { it.name == popularProduct.key }!!
-    }
-    return popularProductOfEachCity
 }
 
 // 9. Получить набор товаров, которые заказывали все покупатели.
 fun Shop.getProductsOrderedByAll(): Set<Product> {
-    val allProducts = customers.flatMap { it.orders }.flatMap { it.products }.toSet()
-    val productsOrderedByAll = mutableSetOf<Product>()
-    for (product in allProducts) {
-        var hasProduct = true
-        for (customer in customers) {
-            if (product !in customer.orders.flatMap { it.products }.toSet()) {
-                hasProduct = false
-                break
-            }
-        }
-        if (hasProduct)
-            productsOrderedByAll.add(product)
-    }
-    return productsOrderedByAll
+    return customers.map { it.orders.flatMap { it.products }.toSet() }
+        .reduceRight { acc, set -> acc.intersect(set) }
 }
-
